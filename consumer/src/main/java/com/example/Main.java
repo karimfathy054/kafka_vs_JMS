@@ -10,6 +10,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -22,26 +23,24 @@ public class Main {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, UUID.randomUUID().toString()); // Consumer group ID
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest"); // Read from the beginning
 
         KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);
 
         String topic = "ddia4"; 
         consumer.subscribe(Collections.singletonList(topic));
         ArrayList<Long> latencies = new ArrayList<>();
-        try (FileWriter csvWriter = new FileWriter("latencies_consumer.csv")) {
+        try (FileWriter csvWriter = new FileWriter("latencies_consumer_e2e.csv")) {
             csvWriter.append("Run_Number,Latency\n"); 
-            for (int i = 0; i < 1000; i++) {
-                long start = System.currentTimeMillis();
-                int msgCount = 0;
-                while (msgCount < 1000) {
-                    ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000)); // Poll with timeout
-                    msgCount += records.count();
+            int msgCount = 0;
+            while(msgCount<10000) {
+                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(10000)); 
+                for(ConsumerRecord<String, String> record : records) {
+                    msgCount++;
+                    long start = Long.parseLong(new String(record.headers().lastHeader("timestamp").value()));
+                    long latency = System.currentTimeMillis() - start;
+                    latencies.add(latency);
+                    csvWriter.append( msgCount + "," + latency + "\n"); 
                 }
-                long latency = System.currentTimeMillis() - start;
-                latencies.add(latency);
-                csvWriter.append(i + 1 + "," + latency + "\n"); // Write run number and latency to CSV
-                consumer.seekToBeginning(consumer.assignment());
             }
         }
 
